@@ -1,4 +1,5 @@
 import { parseCron, describeCron, nextRuns } from './cron.js';
+import { runsToIcs } from './ics.js';
 
 const dictionary = {
   en: {
@@ -13,7 +14,9 @@ const dictionary = {
     examples: 'Try an example',
     resultTitle: 'What it means',
     normalized: 'Normalized:',
-    nextTitle: 'Next 5 run times',
+    nextTitle: 'Upcoming run times',
+    countLabel: 'Show',
+    exportCalendar: '↓ Export .ics',
     guideTitle: 'Field reference',
     fields: 'minute · hour · day of month · month · day of week',
     every15: 'Every 15 values in a field',
@@ -37,7 +40,9 @@ const dictionary = {
     examples: 'דוגמאות',
     resultTitle: 'משמעות הביטוי',
     normalized: 'ביטוי מנורמל:',
-    nextTitle: '5 מועדי ההפעלה הבאים',
+    nextTitle: 'מועדי ההפעלה הבאים',
+    countLabel: 'הצג',
+    exportCalendar: '↓ ייצוא ליומן',
     guideTitle: 'מדריך השדות',
     fields: 'דקה · שעה · יום בחודש · חודש · יום בשבוע',
     every15: 'כל 15 ערכים בשדה',
@@ -59,6 +64,9 @@ const runsList = document.querySelector('#next-runs');
 const errorBox = document.querySelector('#error');
 const timezone = document.querySelector('#timezone');
 const note = document.querySelector('#next-note');
+const runCount = document.querySelector('#run-count');
+const calendarButton = document.querySelector('#export-calendar');
+let lastPreview = null;
 
 function language() { return localePicker.value === 'he' ? 'he' : 'en'; }
 
@@ -77,9 +85,12 @@ function render() {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
   timezone.textContent = messages.timezone + ': ' + zone;
   note.textContent = messages.previewNote;
+  lastPreview = null;
+  calendarButton.disabled = true;
   try {
     const schedule = parseCron(cronInput.value);
-    const dates = nextRuns(schedule, 5, new Date());
+    const dates = nextRuns(schedule, Number(runCount.value), new Date());
+    if (dates.length) { lastPreview = { expression: schedule.expression, runs: dates }; calendarButton.disabled = false; }
     normalized.textContent = schedule.expression;
     explanation.textContent = describeCron(schedule, lang);
     errorBox.hidden = true;
@@ -117,6 +128,27 @@ function render() {
   }
 }
 
+function saveCalendar() {
+  if (!lastPreview) return;
+  try {
+    const calendar = runsToIcs(lastPreview);
+    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'cron-preview.ics';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    errorBox.textContent = error instanceof Error ? error.message : 'Calendar export failed.';
+    errorBox.hidden = false;
+  }
+}
+calendarButton.addEventListener('click', saveCalendar);
+runCount.addEventListener('change', render);
+cronInput.addEventListener('input', () => {
+  lastPreview = null;
+  calendarButton.disabled = true;
+});
 document.querySelector('#cron-form').addEventListener('submit', event => {
   event.preventDefault();
   render();
