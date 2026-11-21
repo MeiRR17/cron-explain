@@ -1,6 +1,7 @@
 import { parseCron, describeCron, nextRuns } from './cron.js';
 import { runsToIcs } from './ics.js';
 import { runsToCsv } from './csv.js';
+import { previewClockRisks } from './clock.js';
 
 const dictionary = {
   en: {
@@ -20,6 +21,8 @@ const dictionary = {
     exportCalendar: '↓ Export .ics',
     exportCsv: '↓ Export .csv',
     previewOutdated: 'Expression changed. Select Explain & preview to refresh the estimated times.',
+    offsetWarning: 'The UTC offset changes between some displayed runs. A cron daemon may handle daylight-saving changes differently.',
+    repeatWarning: 'At least one local wall-clock minute appears twice with different absolute times.',
     guideTitle: 'Field reference',
     fields: 'minute · hour · day of month · month · day of week',
     every15: 'Every 15 values in a field',
@@ -48,6 +51,8 @@ const dictionary = {
     exportCalendar: '↓ ייצוא ליומן',
     exportCsv: '↓ ייצוא CSV',
     previewOutdated: 'הביטוי השתנה. יש ללחוץ על הסבר והצגת מועדים כדי לחשב תחזית מעודכנת.',
+    offsetWarning: 'הפרש השעות מ־UTC משתנה בין מועדים בתחזית. מתזמן Cron אמיתי עשוי להתנהג אחרת במעבר השעון.',
+    repeatWarning: 'לפחות דקה אחת בשעון המקומי חוזרת בשני מועדים מוחלטים שונים.',
     guideTitle: 'מדריך השדות',
     fields: 'דקה · שעה · יום בחודש · חודש · יום בשבוע',
     every15: 'כל 15 ערכים בשדה',
@@ -99,6 +104,11 @@ function render() {
     if (dates.length) {
       lastPreview = { expression: schedule.expression, runs: dates };
       calendarButton.disabled = csvButton.disabled = false;
+      const risks = previewClockRisks(dates);
+      const warnings = [];
+      if (risks.offsetChanges) warnings.push(messages.offsetWarning);
+      if (risks.repeatedLocalMinutes) warnings.push(messages.repeatWarning);
+      if (warnings.length) note.textContent = messages.previewNote + ' ' + warnings.join(' ');
     }
     normalized.textContent = schedule.expression;
     explanation.textContent = describeCron(schedule, lang);
