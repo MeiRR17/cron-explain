@@ -51,7 +51,15 @@
       <p class="error" id="error" role="alert" hidden></p>
       <p id="explanation" class="description" aria-live="polite"></p>
       <p class="normalized"><span data-i18n="normalized">Normalized:</span> <code id="normalized"></code></p>
-      <h3 data-i18n="nextTitle">Next 5 run times</h3>
+      <div class="preview-toolbar">
+        <h3 data-i18n="nextTitle">Upcoming run times</h3>
+        <label for="run-count"><span data-i18n="countLabel">Show</span>
+          <select id="run-count" aria-label="Number of upcoming run times">
+            <option value="5" selected>5</option><option value="10">10</option><option value="20">20</option>
+          </select>
+        </label>
+        <button id="export-calendar" type="button" class="secondary-button" disabled data-i18n="exportCalendar">↓ Export .ics</button>
+      </div>
       <ol id="next-runs" class="next-runs" aria-live="polite"></ol>
       <p id="next-note" class="small"></p>
     </section>
