@@ -1,3 +1,5 @@
+import { previewClockRisks } from './clock.js';
+
 /**
  * Export the same local-clock cron preview as a spreadsheet-readable CSV.
  * This is a snapshot of predicted times, never a cron job or recurring event.
@@ -32,7 +34,11 @@ export function runsToCsv({ runs, timeZone = Intl.DateTimeFormat().resolvedOptio
   if (typeof timeZone !== 'string' || timeZone.length > 100) {
     throw new RangeError('Invalid timezone label.');
   }
-  const header = ['number', 'local_datetime', 'utc_datetime', 'utc_offset', 'timezone', 'kind'];
+  const flags = previewClockRisks(runs);
+  const changed = new Set(flags.offsetChangeIndices);
+  const repeated = new Set(flags.repeatedLocalMinuteIndices);
+  const header = ['number', 'local_datetime', 'utc_datetime', 'utc_offset', 'timezone', 'kind',
+    'offset_changed_since_previous', 'repeated_local_clock_minute'];
   const lines = [header.map(csvCell).join(',')];
   let previous = -Infinity;
   for (let i = 0; i < runs.length; i++) {
@@ -44,7 +50,8 @@ export function runsToCsv({ runs, timeZone = Intl.DateTimeFormat().resolvedOptio
     previous = run.getTime();
     lines.push([
       i + 1, localStamp(run), run.toISOString(), utcOffset(run),
-      timeZone, 'preview_not_scheduled',
+      timeZone, 'preview_not_scheduled', changed.has(i) ? 'true' : 'false',
+      repeated.has(i) ? 'true' : 'false',
     ].map(csvCell).join(','));
   }
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
