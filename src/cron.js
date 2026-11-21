@@ -40,7 +40,7 @@ function parseValue(raw, spec) {
 }
 
 function parseField(raw, spec) {
-  if (!raw || /[?LW#]/i.test(raw)) {
+  if (!raw || raw.includes('?') || raw.includes('#')) {
     throw new SyntaxError('Unsupported ' + spec.name + ' field: "' + raw + '". Use standard five-field cron syntax.');
   }
   const values = new Set();
