@@ -1,5 +1,6 @@
 import { parseCron, describeCron, nextRuns } from './cron.js';
 import { runsToIcs } from './ics.js';
+import { runsToCsv } from './csv.js';
 
 const dictionary = {
   en: {
@@ -17,6 +18,8 @@ const dictionary = {
     nextTitle: 'Upcoming run times',
     countLabel: 'Show',
     exportCalendar: '↓ Export .ics',
+    exportCsv: '↓ Export .csv',
+    previewOutdated: 'Expression changed. Select Explain & preview to refresh the estimated times.',
     guideTitle: 'Field reference',
     fields: 'minute · hour · day of month · month · day of week',
     every15: 'Every 15 values in a field',
@@ -43,6 +46,8 @@ const dictionary = {
     nextTitle: 'מועדי ההפעלה הבאים',
     countLabel: 'הצג',
     exportCalendar: '↓ ייצוא ליומן',
+    exportCsv: '↓ ייצוא CSV',
+    previewOutdated: 'הביטוי השתנה. יש ללחוץ על הסבר והצגת מועדים כדי לחשב תחזית מעודכנת.',
     guideTitle: 'מדריך השדות',
     fields: 'דקה · שעה · יום בחודש · חודש · יום בשבוע',
     every15: 'כל 15 ערכים בשדה',
@@ -66,6 +71,7 @@ const timezone = document.querySelector('#timezone');
 const note = document.querySelector('#next-note');
 const runCount = document.querySelector('#run-count');
 const calendarButton = document.querySelector('#export-calendar');
+const csvButton = document.querySelector('#export-csv');
 let lastPreview = null;
 
 function language() { return localePicker.value === 'he' ? 'he' : 'en'; }
@@ -86,11 +92,14 @@ function render() {
   timezone.textContent = messages.timezone + ': ' + zone;
   note.textContent = messages.previewNote;
   lastPreview = null;
-  calendarButton.disabled = true;
+  calendarButton.disabled = csvButton.disabled = true;
   try {
     const schedule = parseCron(cronInput.value);
     const dates = nextRuns(schedule, Number(runCount.value), new Date());
-    if (dates.length) { lastPreview = { expression: schedule.expression, runs: dates }; calendarButton.disabled = false; }
+    if (dates.length) {
+      lastPreview = { expression: schedule.expression, runs: dates };
+      calendarButton.disabled = csvButton.disabled = false;
+    }
     normalized.textContent = schedule.expression;
     explanation.textContent = describeCron(schedule, lang);
     errorBox.hidden = true;
@@ -128,26 +137,41 @@ function render() {
   }
 }
 
-function saveCalendar() {
+function downloadSnapshot(contents, filename, mime) {
+  const url = URL.createObjectURL(new Blob([contents], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function saveSnapshot(kind) {
   if (!lastPreview) return;
   try {
-    const calendar = runsToIcs(lastPreview);
-    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'cron-preview.ics';
-    document.body.append(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const isCsv = kind === 'csv';
+    const contents = isCsv ? runsToCsv(lastPreview) : runsToIcs(lastPreview);
+    downloadSnapshot(contents, isCsv ? 'cron-preview.csv' : 'cron-preview.ics',
+      isCsv ? 'text/csv;charset=utf-8' : 'text/calendar;charset=utf-8');
+    errorBox.hidden = true;
   } catch (error) {
-    errorBox.textContent = error instanceof Error ? error.message : 'Calendar export failed.';
+    errorBox.textContent = error instanceof Error ? error.message : 'Preview export failed.';
     errorBox.hidden = false;
   }
 }
-calendarButton.addEventListener('click', saveCalendar);
+calendarButton.addEventListener('click', () => saveSnapshot('ics'));
+csvButton.addEventListener('click', () => saveSnapshot('csv'));
 runCount.addEventListener('change', render);
 cronInput.addEventListener('input', () => {
   lastPreview = null;
-  calendarButton.disabled = true;
+  calendarButton.disabled = csvButton.disabled = true;
+  explanation.textContent = '';
+  normalized.textContent = '';
+  runsList.replaceChildren();
+  errorBox.hidden = true;
+  errorBox.textContent = '';
+  note.textContent = dictionary[language()].previewOutdated;
 });
 document.querySelector('#cron-form').addEventListener('submit', event => {
   event.preventDefault();
