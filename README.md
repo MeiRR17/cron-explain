@@ -11,7 +11,8 @@ A responsive, dependency-free browser tool that explains an expression and previ
 - English month/weekday names (\`JAN-DEC\`, \`SUN-SAT\`).
 - \`@hourly\`, \`@daily\`, \`@weekly\`, \`@monthly\`, \`@yearly\`, and equivalent aliases.
 - Hebrew/English explanations with a one-click language switch.
-- Next five matching local times, with timezone information.
+- Next **5, 10 or 20** matching local times, with timezone information.
+- Download the displayed occurrences as a standard **ICS calendar preview** with UTC event timestamps, a one-minute duration and explicit *not scheduled* labels. Importing ICS does not create cron jobs.
 - Preset examples, mobile-friendly layout, accessible form, and dark-mode styling.
 
 ## Use it
@@ -52,6 +53,7 @@ console.log(nextRuns(schedule, 5, new Date()));
 - Future times are calculated against the **browser's local timezone** using JavaScript \`Date\`. The preview is not a guarantee that your specific cron scheduler will run (especially around daylight-saving clock changes).
 - Search looks up to eight years ahead; expressions with no matching time in that horizon display a clear message.
 - No external requests or server-side processing are performed by the application.
+- The ICS export is a *snapshot* of up to 20 predicted matches, not a recurring rule. Events are informational; no automatic execution or guarantee around daylight saving changes is implied.
 
 ## Structure
 
@@ -59,6 +61,7 @@ console.log(nextRuns(schedule, 5, new Date()));
 index.html       Localized interface and field reference
 styles.css       Responsive layout and dark mode
 src/cron.js      Parser, local-time scheduler, English/Hebrew explanation
+src/ics.js       RFC 5545 snapshot export of up to 20 predicted runs
 src/app.js       Browser interactions and localized output
 \`\`\`
 
