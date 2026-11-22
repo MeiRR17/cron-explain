@@ -57,7 +57,7 @@ console.log(nextRuns(schedule, 5, new Date()));
 - The optional start date/time is interpreted in the browser's local timezone. Invalid calendar dates and nonexistent wall-clock minutes during forward daylight-saving changes are rejected. Ambiguous repeated minutes resolve to the earlier occurrence according to JavaScript Date behavior. A chosen start affects the preview only and is not transmitted anywhere.
 - Search looks up to eight years ahead; expressions with no matching time in that horizon display a clear message.
 - No external requests or server-side processing are performed by the application.
-- The ICS export is a *snapshot* of up to 20 predicted matches, not a recurring rule. Events are informational; no automatic execution or guarantee around daylight saving changes is implied.
+- The ICS export is a *snapshot* of up to 20 predicted matches, not a recurring rule. Events are informational; no automatic execution or guarantee around daylight saving changes is implied. Programmatic ICS export now rejects unsorted, duplicate, non-Date or invalid run instants (matching the CSV preview ordering), out-of-range UTC calendar years, and multiline/control-character expressions rather than silently emitting a misleading calendar.
 - Modifying a cron expression immediately clears the old preview and disables both exports until recalculation. CSV offsets are calculated separately for each occurrence, which matters when an interval crosses a daylight-saving transition; the predictions still follow the browser's local timezone and may differ from an actual daemon's policy.
 
 ## Structure

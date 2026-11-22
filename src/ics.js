@@ -11,6 +11,11 @@ function utcStamp(date) {
   if (!(date instanceof Date) || !Number.isFinite(date.getTime())) {
     throw new TypeError('Expected a valid Date.');
   }
+  // RFC 5545 DATE-TIME uses four-digit Gregorian years. The JavaScript Date
+  // range is much wider and its expanded ISO years are not valid ICS values.
+  if (date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999) {
+    throw new RangeError('Calendar events must have a four-digit UTC year.');
+  }
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
 function escapeText(value) {
@@ -39,9 +44,10 @@ function fold(line) {
  * @returns {string} UTF-8 ICS content, CRLF delimited.
  */
 export function runsToIcs({ expression, runs, createdAt = new Date() }) {
-  if (typeof expression !== 'string' || expression.length > 120 ||
+  if (typeof expression !== 'string' || !expression.trim() ||
+      expression.length > 120 || /[\u0000-\u001F\u007F]/u.test(expression) ||
       !Array.isArray(runs) || runs.length < 1 || runs.length > MAX_OCCURRENCES) {
-    throw new RangeError('Provide 1–20 valid preview runs and a cron expression.');
+    throw new RangeError('Provide 1–20 valid preview runs and a one-line cron expression.');
   }
   const stamp = utcStamp(createdAt);
   const lines = [
@@ -52,14 +58,17 @@ export function runsToIcs({ expression, runs, createdAt = new Date() }) {
     'PRODID:-//MeiRR17//Cron Explain Preview//EN',
     'X-WR-CALNAME:Cron run estimates',
   ];
-  const unique = new Set();
+  let previous = -Infinity;
   for (let i = 0; i < runs.length; i++) {
     const run = runs[i];
-    const instant = run.getTime();
-    if (!Number.isFinite(instant) || unique.has(instant)) {
-      throw new TypeError('Run dates must be valid and distinct.');
+    if (!(run instanceof Date) || !Number.isFinite(run.getTime()) ||
+        run.getTime() <= previous) {
+      // Match CSV's ordering contract. A scrambled sequence can misrepresent
+      // the forecast even if every individual timestamp is valid.
+      throw new TypeError('Run dates must be valid and strictly increasing.');
     }
-    unique.add(instant);
+    const instant = run.getTime();
+    previous = instant;
     const id = utcStamp(run);
     lines.push(
       'BEGIN:VEVENT',
