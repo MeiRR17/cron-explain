@@ -20,6 +20,11 @@ const dictionary = {
     countLabel: 'Show',
     exportCalendar: '↓ Export .ics',
     exportCsv: '↓ Export .csv',
+    startLabel: 'Preview after (optional)',
+    startNow: 'Use current time',
+    startTip: 'Leave blank to preview after now. Skipped daylight-saving wall times are rejected.',
+    invalidStart: 'Enter a valid local date and time. Skipped daylight-saving times cannot be selected.',
+    previewNoteSelected: 'Preview starts after the selected local time. Ambiguous repeated times resolve to the earlier instant. Execution is not guaranteed.',
     previewOutdated: 'Expression changed. Select Explain & preview to refresh the estimated times.',
     offsetWarning: 'The UTC offset changes between some displayed runs. A cron daemon may handle daylight-saving changes differently.',
     repeatWarning: 'At least one local wall-clock minute appears twice with different absolute times.',
@@ -50,6 +55,11 @@ const dictionary = {
     countLabel: 'הצג',
     exportCalendar: '↓ ייצוא ליומן',
     exportCsv: '↓ ייצוא CSV',
+    startLabel: 'הצגת מועדים אחרי (לא חובה)',
+    startNow: 'השתמש בזמן הנוכחי',
+    startTip: 'ללא בחירה התחזית מתחילה מעכשיו. שעות שאינן קיימות במעבר לשעון קיץ יידחו.',
+    invalidStart: 'יש לבחור תאריך ושעה מקומיים תקינים. שעה שאינה קיימת במעבר שעון אינה נתמכת.',
+    previewNoteSelected: 'התחזית מתחילה לאחר הזמן המקומי שנבחר. שעה חוזרת מפורשת כמופע הראשון שלה. אין הבטחת הפעלה בפועל.',
     previewOutdated: 'הביטוי השתנה. יש ללחוץ על הסבר והצגת מועדים כדי לחשב תחזית מעודכנת.',
     offsetWarning: 'הפרש השעות מ־UTC משתנה בין מועדים בתחזית. מתזמן Cron אמיתי עשוי להתנהג אחרת במעבר השעון.',
     repeatWarning: 'לפחות דקה אחת בשעון המקומי חוזרת בשני מועדים מוחלטים שונים.',
@@ -75,6 +85,8 @@ const errorBox = document.querySelector('#error');
 const timezone = document.querySelector('#timezone');
 const note = document.querySelector('#next-note');
 const runCount = document.querySelector('#run-count');
+const previewFrom = document.querySelector('#preview-from');
+const resetStart = document.querySelector('#reset-start');
 const calendarButton = document.querySelector('#export-calendar');
 const csvButton = document.querySelector('#export-csv');
 let lastPreview = null;
@@ -90,17 +102,46 @@ function translate() {
   }
 }
 
+function selectedStart() {
+  if (!previewFrom.value) return new Date();
+  if (!previewFrom.validity.valid) throw new RangeError(dictionary[language()].invalidStart);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(previewFrom.value);
+  if (!match) throw new RangeError(dictionary[language()].invalidStart);
+  const [, yy, mm, dd, hh, mi] = match.map(Number);
+  const date = new Date(0);
+  date.setFullYear(yy, mm - 1, dd);
+  date.setHours(hh, mi, 0, 0);
+  // Reject invalid dates and nonexistent local minutes silently normalized by Date.
+  if (!Number.isFinite(date.getTime()) || date.getFullYear() !== yy ||
+      date.getMonth() !== mm - 1 || date.getDate() !== dd ||
+      date.getHours() !== hh || date.getMinutes() !== mi) {
+    throw new RangeError(dictionary[language()].invalidStart);
+  }
+  return date;
+}
+
+function invalidatePreview() {
+  lastPreview = null;
+  calendarButton.disabled = csvButton.disabled = true;
+  explanation.textContent = '';
+  normalized.textContent = '';
+  runsList.replaceChildren();
+  errorBox.hidden = true;
+  errorBox.textContent = '';
+  note.textContent = dictionary[language()].previewOutdated;
+}
+
 function render() {
   const lang = language();
   const messages = dictionary[lang];
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
   timezone.textContent = messages.timezone + ': ' + zone;
-  note.textContent = messages.previewNote;
+  note.textContent = previewFrom.value ? messages.previewNoteSelected : messages.previewNote;
   lastPreview = null;
   calendarButton.disabled = csvButton.disabled = true;
   try {
     const schedule = parseCron(cronInput.value);
-    const dates = nextRuns(schedule, Number(runCount.value), new Date());
+    const dates = nextRuns(schedule, Number(runCount.value), selectedStart());
     if (dates.length) {
       lastPreview = { expression: schedule.expression, runs: dates };
       calendarButton.disabled = csvButton.disabled = false;
@@ -108,7 +149,7 @@ function render() {
       const warnings = [];
       if (risks.offsetChanges) warnings.push(messages.offsetWarning);
       if (risks.repeatedLocalMinutes) warnings.push(messages.repeatWarning);
-      if (warnings.length) note.textContent = messages.previewNote + ' ' + warnings.join(' ');
+      if (warnings.length) note.textContent += ' ' + warnings.join(' ');
     }
     normalized.textContent = schedule.expression;
     explanation.textContent = describeCron(schedule, lang);
@@ -173,15 +214,11 @@ function saveSnapshot(kind) {
 calendarButton.addEventListener('click', () => saveSnapshot('ics'));
 csvButton.addEventListener('click', () => saveSnapshot('csv'));
 runCount.addEventListener('change', render);
-cronInput.addEventListener('input', () => {
-  lastPreview = null;
-  calendarButton.disabled = csvButton.disabled = true;
-  explanation.textContent = '';
-  normalized.textContent = '';
-  runsList.replaceChildren();
-  errorBox.hidden = true;
-  errorBox.textContent = '';
-  note.textContent = dictionary[language()].previewOutdated;
+cronInput.addEventListener('input', invalidatePreview);
+previewFrom.addEventListener('input', invalidatePreview);
+resetStart.addEventListener('click', () => {
+  previewFrom.value = '';
+  render();
 });
 document.querySelector('#cron-form').addEventListener('submit', event => {
   event.preventDefault();

@@ -33,6 +33,12 @@
           <button class="primary" type="submit" data-i18n="explain">Explain & preview</button>
         </div>
         <p class="small" id="syntax-tip" data-i18n="syntaxTip">Supports numbers, ranges, lists, steps, month/day names, and standard @daily-style macros.</p>
+        <div class="start-row">
+          <label for="preview-from" data-i18n="startLabel">Preview after (optional)</label>
+          <input id="preview-from" type="datetime-local" step="60" aria-describedby="start-tip">
+          <button id="reset-start" type="button" class="secondary-button" data-i18n="startNow">Use current time</button>
+        </div>
+        <p class="small" id="start-tip" data-i18n="startTip">Leave blank to preview after now; dates use your browser's local timezone.</p>
       </form>
       <h3 data-i18n="examples">Try an example</h3>
       <div class="presets" id="presets">
