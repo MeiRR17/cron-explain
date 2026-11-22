@@ -1,6 +1,7 @@
 import { parseCron, describeCron, nextRuns } from './cron.js';
 import { runsToIcs } from './ics.js';
 import { runsToCsv } from './csv.js';
+import { runsToJson } from './json.js';
 import { previewClockRisks } from './clock.js';
 
 const dictionary = {
@@ -20,6 +21,7 @@ const dictionary = {
     countLabel: 'Show',
     exportCalendar: '↓ Export .ics',
     exportCsv: '↓ Export .csv',
+    exportJson: '↓ Export .json',
     startLabel: 'Preview after (optional)',
     startNow: 'Use current time',
     startTip: 'Leave blank to preview after now. Skipped daylight-saving wall times are rejected.',
@@ -55,6 +57,7 @@ const dictionary = {
     countLabel: 'הצג',
     exportCalendar: '↓ ייצוא ליומן',
     exportCsv: '↓ ייצוא CSV',
+    exportJson: '↓ ייצוא JSON',
     startLabel: 'הצגת מועדים אחרי (לא חובה)',
     startNow: 'השתמש בזמן הנוכחי',
     startTip: 'ללא בחירה התחזית מתחילה מעכשיו. שעות שאינן קיימות במעבר לשעון קיץ יידחו.',
@@ -89,6 +92,7 @@ const previewFrom = document.querySelector('#preview-from');
 const resetStart = document.querySelector('#reset-start');
 const calendarButton = document.querySelector('#export-calendar');
 const csvButton = document.querySelector('#export-csv');
+const jsonButton = document.querySelector('#export-json');
 let lastPreview = null;
 
 function language() { return localePicker.value === 'he' ? 'he' : 'en'; }
@@ -122,7 +126,7 @@ function selectedStart() {
 
 function invalidatePreview() {
   lastPreview = null;
-  calendarButton.disabled = csvButton.disabled = true;
+  calendarButton.disabled = csvButton.disabled = jsonButton.disabled = true;
   explanation.textContent = '';
   normalized.textContent = '';
   runsList.replaceChildren();
@@ -138,13 +142,13 @@ function render() {
   timezone.textContent = messages.timezone + ': ' + zone;
   note.textContent = previewFrom.value ? messages.previewNoteSelected : messages.previewNote;
   lastPreview = null;
-  calendarButton.disabled = csvButton.disabled = true;
+  calendarButton.disabled = csvButton.disabled = jsonButton.disabled = true;
   try {
     const schedule = parseCron(cronInput.value);
     const dates = nextRuns(schedule, Number(runCount.value), selectedStart());
     if (dates.length) {
       lastPreview = { expression: schedule.expression, runs: dates };
-      calendarButton.disabled = csvButton.disabled = false;
+      calendarButton.disabled = csvButton.disabled = jsonButton.disabled = false;
       const risks = previewClockRisks(dates);
       const warnings = [];
       if (risks.offsetChanges) warnings.push(messages.offsetWarning);
@@ -201,10 +205,12 @@ function downloadSnapshot(contents, filename, mime) {
 function saveSnapshot(kind) {
   if (!lastPreview) return;
   try {
-    const isCsv = kind === 'csv';
-    const contents = isCsv ? runsToCsv(lastPreview) : runsToIcs(lastPreview);
-    downloadSnapshot(contents, isCsv ? 'cron-preview.csv' : 'cron-preview.ics',
-      isCsv ? 'text/csv;charset=utf-8' : 'text/calendar;charset=utf-8');
+    const contents = kind === 'csv' ? runsToCsv(lastPreview) :
+      kind === 'json' ? runsToJson(lastPreview) : runsToIcs(lastPreview);
+    const file = kind === 'csv' ? ['cron-preview.csv', 'text/csv;charset=utf-8'] :
+      kind === 'json' ? ['cron-preview.json', 'application/json;charset=utf-8'] :
+      ['cron-preview.ics', 'text/calendar;charset=utf-8'];
+    downloadSnapshot(contents, file[0], file[1]);
     errorBox.hidden = true;
   } catch (error) {
     errorBox.textContent = error instanceof Error ? error.message : 'Preview export failed.';
@@ -213,6 +219,7 @@ function saveSnapshot(kind) {
 }
 calendarButton.addEventListener('click', () => saveSnapshot('ics'));
 csvButton.addEventListener('click', () => saveSnapshot('csv'));
+jsonButton.addEventListener('click', () => saveSnapshot('json'));
 runCount.addEventListener('change', render);
 cronInput.addEventListener('input', invalidatePreview);
 previewFrom.addEventListener('input', invalidatePreview);
