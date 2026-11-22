@@ -1,4 +1,4 @@
-import { previewClockRisks } from './clock.js';
+import { previewClockRisks, previewGaps } from './clock.js';
 
 /**
  * Export the same local-clock cron preview as a spreadsheet-readable CSV.
@@ -35,10 +35,12 @@ export function runsToCsv({ runs, timeZone = Intl.DateTimeFormat().resolvedOptio
     throw new RangeError('Invalid timezone label.');
   }
   const flags = previewClockRisks(runs);
+  const gaps = previewGaps(runs);
   const changed = new Set(flags.offsetChangeIndices);
   const repeated = new Set(flags.repeatedLocalMinuteIndices);
   const header = ['number', 'local_datetime', 'utc_datetime', 'utc_offset', 'timezone', 'kind',
-    'offset_changed_since_previous', 'repeated_local_clock_minute'];
+    'offset_changed_since_previous', 'repeated_local_clock_minute',
+    'elapsed_minutes_since_previous'];
   const lines = [header.map(csvCell).join(',')];
   let previous = -Infinity;
   for (let i = 0; i < runs.length; i++) {
@@ -52,6 +54,7 @@ export function runsToCsv({ runs, timeZone = Intl.DateTimeFormat().resolvedOptio
       i + 1, localStamp(run), run.toISOString(), utcOffset(run),
       timeZone, 'preview_not_scheduled', changed.has(i) ? 'true' : 'false',
       repeated.has(i) ? 'true' : 'false',
+      i ? gaps.gapsMinutes[i - 1] : '',
     ].map(csvCell).join(','));
   }
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
