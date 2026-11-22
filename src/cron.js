@@ -75,7 +75,16 @@ function parseField(raw, spec) {
     }
   }
   const totalPossible = spec.max - spec.min + (spec.name === 'dayOfWeek' ? 0 : 1);
-  return { raw, values, unrestricted: values.size === totalPossible };
+  // "All values selected" is NOT the same as a leading-star cron field.
+  // Traditional Vixie/Cronie DOM/DOW rules distinguish wildcard * syntax
+  // (including */steps) from explicit full-coverage ranges such as 1-31.
+  // Keep unrestricted for readable field descriptions, and retain the
+  // independent syntax property for matching semantics.
+  return {
+    raw, values,
+    unrestricted: values.size === totalPossible,
+    startsWithWildcard: raw.startsWith('*'),
+  };
 }
 
 /**
@@ -107,9 +116,14 @@ export function parseCron(input) {
 function matchesDay(schedule, date) {
   const dayOfMonth = schedule.dayOfMonth.values.has(date.getDate());
   const dayOfWeek = schedule.dayOfWeek.values.has(date.getDay());
-  if (schedule.dayOfMonth.unrestricted) return dayOfWeek;
-  if (schedule.dayOfWeek.unrestricted) return dayOfMonth;
-  return dayOfMonth || dayOfWeek;
+  // Cron's OR rule applies only when BOTH day fields begin with a
+  // non-wildcard token. An explicit 1-31 still counts as restricted
+  // even though it selects every day. Conversely, */2 starts with *
+  // and combines by AND; ignoring this would add unexpected run days.
+  return !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard
+    ? dayOfMonth || dayOfWeek
+    : dayOfMonth && dayOfWeek;
 }
 
 /**
@@ -173,7 +187,8 @@ function formatSelected(field, names = null) {
  */
 export function describeCron(schedule, locale = 'en') {
   if (locale !== 'en' && locale !== 'he') throw new RangeError('Locale must be en or he.');
-  const dayRule = !schedule.dayOfMonth.unrestricted && !schedule.dayOfWeek.unrestricted;
+  const dayRule = !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard;
   const minute = schedule.minute.unrestricted ? null : formatSelected(schedule.minute);
   const hour = schedule.hour.unrestricted ? null : formatSelected(schedule.hour);
   const month = schedule.month.unrestricted ? null : formatSelected(schedule.month, Object.fromEntries(MONTHS.map((n, i) => [i + 1, n])));
