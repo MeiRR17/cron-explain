@@ -143,11 +143,12 @@ export function nextRuns(schedule, count = 5, from = new Date()) {
     throw new RangeError('count must be between 1 and 20.');
   }
   const result = [];
-  let cursor = new Date(from.getTime());
-  cursor.setSeconds(0, 0);
-  if (cursor.getTime() <= from.getTime()) {
-    cursor = new Date(cursor.getTime() + 60000);
-  }
+  // Advance in absolute (UTC) minutes, never by mutating local wall time.
+  // During a fall-back DST fold, a repeated local minute can resolve to
+  // its earlier occurrence when seconds are reset via setSeconds(0, 0).
+  // This must not produce a cron preview from before the requested instant.
+  const nextMinute = Math.floor(from.getTime() / 60_000) + 1;
+  let cursor = new Date(nextMinute * 60_000);
   const lastYear = from.getFullYear() + 8;
   let iterations = 0;
 
