@@ -16,6 +16,7 @@ A responsive, dependency-free browser tool that explains an expression and previ
 - Download the displayed occurrences as a standard **ICS calendar preview** with UTC event timestamps, a one-minute duration and explicit *not scheduled* labels. Importing ICS does not create cron jobs.
 - Export the same up to 20 predicted occurrences as **CSV**, with local date/time, UTC timestamp, per-occurrence UTC offset and timezone name. The file also flags offset changes since the preceding occurrence, repeated local-clock minutes, and `elapsed_minutes_since_previous`: the actual elapsed minutes between the current predicted UTC instant and its preceding occurrence. The first row leaves this field blank (no predecessor). The CSV contains no command or executable schedule.
 - Export a separate **JSON preview snapshot**, with normalized cron expression, timezone, UTC instants, browser-local wall-clock minutes, per-run UTC offset in minutes, **elapsed minutes since the previous prediction**, observed minimum/maximum intervals and DST warning flags. It contains no shell command and is not a runnable cron schedule.
+- See a **local-weekday frequency breakdown** of the displayed 1–20 predictions. The bilingual preview reports only weekdays with observed matches; JSON includes a fixed Sunday–Saturday `localWeekdayCounts` map and `weekdaysRepresented` count. This is descriptive of the sampled preview window, **not a statement that other weekdays can never match**, not a recurring rule and not a guarantee of daemon execution.
 - See observed elapsed-time gaps between adjacent displayed predictions: a single gap for evenly spaced snapshots, or a minimum–maximum range for varying gaps. CSV and JSON both reuse the same `previewGaps()` calculations; neither interprets wall-clock label differences as elapsed UTC minutes. These are **actual elapsed minutes between predicted instants**, not a guaranteed cron interval. Calendar boundaries and daylight saving changes can make gaps unequal; only the 1–20 displayed predictions are measured.
 - Preset examples, mobile-friendly layout, accessible form, and dark-mode styling.
 
@@ -72,7 +73,7 @@ src/cron.js      Parser, local-time scheduler, English/Hebrew explanation
 src/ics.js       RFC 5545 snapshot export of up to 20 predicted runs
 src/csv.js       UTF-8 CSV snapshot including local/UTC timestamps, offsets and elapsed minutes
 src/json.js      Machine-readable informational snapshot with DST diagnostic flags
-src/clock.js     Pure offset-change, repeated-wall-minute and elapsed-gap diagnostics
+src/clock.js     Pure offset-change, repeated-wall-minute, elapsed-gap and weekday-frequency diagnostics
 src/app.js       Browser interactions and localized output
 \`\`\`
 

@@ -1,4 +1,4 @@
-import { previewClockRisks, previewGaps } from './clock.js';
+import { previewClockRisks, previewGaps, previewWeekdays } from './clock.js';
 
 /**
  * Machine-readable snapshot of predicted cron wall-clock matches.
@@ -31,6 +31,7 @@ export function runsToJson({
   // Reuse one common order and validity contract for DST warnings.
   const risks = previewClockRisks(runs);
   const gaps = previewGaps(runs);
+  const weekdays = previewWeekdays(runs);
   const changed = new Set(risks.offsetChangeIndices);
   const repeated = new Set(risks.repeatedLocalMinuteIndices);
   const occurrences = runs.map((date, index) => {
@@ -63,6 +64,8 @@ export function runsToJson({
       offsetChanges: risks.offsetChanges,
       repeatedLocalMinutes: risks.repeatedLocalMinutes,
     },
+    localWeekdayCounts: weekdays.byWeekday,
+    weekdaysRepresented: weekdays.daysRepresented,
     occurrences,
     advisory: 'Matching local times are estimates, not cron daemon executions. DST handling depends on the scheduler.',
   }, null, 2) + '\n';

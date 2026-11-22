@@ -2,7 +2,7 @@ import { parseCron, describeCron, nextRuns } from './cron.js';
 import { runsToIcs } from './ics.js';
 import { runsToCsv } from './csv.js';
 import { runsToJson } from './json.js';
-import { previewClockRisks, previewGaps } from './clock.js';
+import { previewClockRisks, previewGaps, previewWeekdays } from './clock.js';
 
 const dictionary = {
   en: {
@@ -34,6 +34,8 @@ const dictionary = {
     gapVariable: 'Observed elapsed gap range between previews:',
     minutes: 'minutes',
     gapsUnavailable: 'At least two preview times are needed to show elapsed gaps.',
+    weekdayTitle: 'Weekdays among displayed matches',
+    weekdayNames: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     guideTitle: 'Field reference',
     fields: 'minute · hour · day of month · month · day of week',
     every15: 'Every 15 values in a field',
@@ -74,6 +76,8 @@ const dictionary = {
     gapVariable: 'טווח הפרשי הזמן שנצפו בין המועדים החזויים:',
     minutes: 'דקות',
     gapsUnavailable: 'דרושים לפחות שני מועדים חזויים להצגת הפרשי זמן.',
+    weekdayTitle: 'ימי השבוע במועדים המוצגים',
+    weekdayNames: ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','שבת'],
     guideTitle: 'מדריך השדות',
     fields: 'דקה · שעה · יום בחודש · חודש · יום בשבוע',
     every15: 'כל 15 ערכים בשדה',
@@ -96,6 +100,7 @@ const errorBox = document.querySelector('#error');
 const timezone = document.querySelector('#timezone');
 const note = document.querySelector('#next-note');
 const gapSummary = document.querySelector('#gap-summary');
+const weekdaySummary = document.querySelector('#weekday-summary');
 const runCount = document.querySelector('#run-count');
 const previewFrom = document.querySelector('#preview-from');
 const resetStart = document.querySelector('#reset-start');
@@ -143,6 +148,7 @@ function invalidatePreview() {
   errorBox.textContent = '';
   note.textContent = dictionary[language()].previewOutdated;
   gapSummary.textContent = '';
+  weekdaySummary.textContent = '';
 }
 
 function render() {
@@ -154,6 +160,7 @@ function render() {
   lastPreview = null;
   calendarButton.disabled = csvButton.disabled = jsonButton.disabled = true;
   gapSummary.textContent = '';
+  weekdaySummary.textContent = '';
   try {
     const schedule = parseCron(cronInput.value);
     const dates = nextRuns(schedule, Number(runCount.value), selectedStart());
@@ -162,6 +169,13 @@ function render() {
       calendarButton.disabled = csvButton.disabled = jsonButton.disabled = false;
       const risks = previewClockRisks(dates);
       const gaps = previewGaps(dates);
+      const weekdays = previewWeekdays(dates);
+      weekdaySummary.textContent = messages.weekdayTitle + ': ' +
+        Object.values(weekdays.byWeekday)
+          .map((count, index) => count
+            ? messages.weekdayNames[index] + ' ' + count : '')
+          .filter(Boolean).join(' · ') +
+        (lang === 'he' ? ' (מתוך חלון התצוגה בלבד).' : ' (preview window only).');
       const gapLabel = gaps.uniform ? messages.gapUniform : messages.gapVariable;
       gapSummary.textContent = gaps.minMinutes === null ? messages.gapsUnavailable :
         gapLabel + ' ' + (gaps.uniform ? String(gaps.minMinutes) :

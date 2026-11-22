@@ -75,3 +75,22 @@ export function previewGaps(runs) {
     advisory: 'Elapsed minutes between predicted instants only; not a guarantee of actual job execution.',
   };
 }
+
+
+/**
+ * Frequency of preview instants on local civil weekdays (Sunday first).
+ * This is an observation of 1–20 displayed matches, NOT a recurrence
+ * analysis and not evidence that the daemon will run on those weekdays.
+ */
+export function previewWeekdays(runs) {
+  previewClockRisks(runs); // same bounded, strictly increasing Date contract
+  const weekdays = ['sun','mon','tue','wed','thu','fri','sat'];
+  const byWeekday = Object.fromEntries(weekdays.map(day => [day, 0]));
+  for (const run of runs) byWeekday[weekdays[run.getDay()]]++;
+  return {
+    byWeekday,
+    recordedMatches: runs.length,
+    daysRepresented: Object.values(byWeekday).filter(count => count > 0).length,
+    advisory: 'Only the displayed local-time predictions; not a weekly schedule or execution guarantee.',
+  };
+}
