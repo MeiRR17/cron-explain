@@ -15,7 +15,8 @@ A responsive, dependency-free browser tool that explains an expression and previ
 - Choose an optional **local start date/time** to preview future schedules, or reset to the current time; changing this field clears stale preview results and disables exports until the next calculation.
 - Download the displayed occurrences as a standard **ICS calendar preview** with UTC event timestamps, a one-minute duration and explicit *not scheduled* labels. Importing ICS does not create cron jobs.
 - Export the same up to 20 predicted occurrences as **CSV**, with local date/time, UTC timestamp, per-occurrence UTC offset and timezone name. The file also flags offset changes since the preceding occurrence and repeated local-clock minutes (which can happen during clock changes). The CSV contains no command or executable schedule.
-- Export a separate **JSON preview snapshot**, with normalized cron expression, timezone, UTC instants, browser-local wall-clock minutes, per-run UTC offset in minutes and DST warning flags. It contains no shell command and is not a runnable cron schedule.
+- Export a separate **JSON preview snapshot**, with normalized cron expression, timezone, UTC instants, browser-local wall-clock minutes, per-run UTC offset in minutes, **elapsed minutes since the previous prediction**, observed minimum/maximum intervals and DST warning flags. It contains no shell command and is not a runnable cron schedule.
+- See observed elapsed-time gaps between adjacent displayed predictions: a single gap for evenly spaced snapshots, or a minimum–maximum range for varying gaps. These are **actual elapsed minutes between predicted instants**, not a guaranteed cron interval. Calendar boundaries and daylight saving changes can make gaps unequal; only the 1–20 displayed predictions are measured.
 - Preset examples, mobile-friendly layout, accessible form, and dark-mode styling.
 
 ## Use it
@@ -71,7 +72,7 @@ src/cron.js      Parser, local-time scheduler, English/Hebrew explanation
 src/ics.js       RFC 5545 snapshot export of up to 20 predicted runs
 src/csv.js       UTF-8 CSV snapshot including local/UTC timestamps and UTC offsets
 src/json.js      Machine-readable informational snapshot with DST diagnostic flags
-src/clock.js     Pure offset-change and repeated-wall-minute diagnostics
+src/clock.js     Pure offset-change, repeated-wall-minute and elapsed-gap diagnostics
 src/app.js       Browser interactions and localized output
 \`\`\`
 

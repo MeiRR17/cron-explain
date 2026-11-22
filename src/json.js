@@ -1,4 +1,4 @@
-import { previewClockRisks } from './clock.js';
+import { previewClockRisks, previewGaps } from './clock.js';
 
 /**
  * Machine-readable snapshot of predicted cron wall-clock matches.
@@ -30,6 +30,7 @@ export function runsToJson({
   }
   // Reuse one common order and validity contract for DST warnings.
   const risks = previewClockRisks(runs);
+  const gaps = previewGaps(runs);
   const changed = new Set(risks.offsetChangeIndices);
   const repeated = new Set(risks.repeatedLocalMinuteIndices);
   const occurrences = runs.map((date, index) => {
@@ -42,6 +43,7 @@ export function runsToJson({
       localDateTime: localMinute(date),
       utcDateTime: date.toISOString(),
       utcOffsetMinutes: offsetMinutes(date),
+      elapsedMinutesSincePrevious: index ? gaps.gapsMinutes[index - 1] : null,
       offsetChangedSincePrevious: changed.has(index),
       repeatedLocalClockMinute: repeated.has(index),
     };
@@ -52,6 +54,11 @@ export function runsToJson({
     expression,
     timeZone,
     occurrenceCount: occurrences.length,
+    elapsedGaps: {
+      minMinutes: gaps.minMinutes,
+      maxMinutes: gaps.maxMinutes,
+      uniformWithinPreview: gaps.uniform,
+    },
     clockWarnings: {
       offsetChanges: risks.offsetChanges,
       repeatedLocalMinutes: risks.repeatedLocalMinutes,

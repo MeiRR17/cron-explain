@@ -48,3 +48,30 @@ export function previewClockRisks(runs) {
     repeatedLocalMinuteIndices: repeatedLocalMinutes,
   };
 }
+
+
+/**
+ * Compare actual elapsed time between adjacent predicted UTC instants.
+ * A fixed cron rule need not produce uniform gaps, particularly across
+ * calendar boundaries or daylight-saving changes. This does not model
+ * whether a particular cron daemon will execute any of these matches.
+ */
+export function previewGaps(runs) {
+  // Enforce the same bounded, strictly increasing Date contract as DST flags.
+  previewClockRisks(runs);
+  const gapsMinutes = [];
+  for (let i = 1; i < runs.length; i++) {
+    const minutes = (runs[i].getTime() - runs[i - 1].getTime()) / 60_000;
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      throw new TypeError('Invalid interval between preview instants.');
+    }
+    gapsMinutes.push(minutes);
+  }
+  return {
+    gapsMinutes,
+    minMinutes: gapsMinutes.length ? Math.min(...gapsMinutes) : null,
+    maxMinutes: gapsMinutes.length ? Math.max(...gapsMinutes) : null,
+    uniform: gapsMinutes.length ? gapsMinutes.every(value => value === gapsMinutes[0]) : null,
+    advisory: 'Elapsed minutes between predicted instants only; not a guarantee of actual job execution.',
+  };
+}

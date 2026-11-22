@@ -2,7 +2,7 @@ import { parseCron, describeCron, nextRuns } from './cron.js';
 import { runsToIcs } from './ics.js';
 import { runsToCsv } from './csv.js';
 import { runsToJson } from './json.js';
-import { previewClockRisks } from './clock.js';
+import { previewClockRisks, previewGaps } from './clock.js';
 
 const dictionary = {
   en: {
@@ -30,6 +30,10 @@ const dictionary = {
     previewOutdated: 'Expression changed. Select Explain & preview to refresh the estimated times.',
     offsetWarning: 'The UTC offset changes between some displayed runs. A cron daemon may handle daylight-saving changes differently.',
     repeatWarning: 'At least one local wall-clock minute appears twice with different absolute times.',
+    gapUniform: 'Observed elapsed gap between previews:',
+    gapVariable: 'Observed elapsed gap range between previews:',
+    minutes: 'minutes',
+    gapsUnavailable: 'At least two preview times are needed to show elapsed gaps.',
     guideTitle: 'Field reference',
     fields: 'minute · hour · day of month · month · day of week',
     every15: 'Every 15 values in a field',
@@ -66,6 +70,10 @@ const dictionary = {
     previewOutdated: 'הביטוי השתנה. יש ללחוץ על הסבר והצגת מועדים כדי לחשב תחזית מעודכנת.',
     offsetWarning: 'הפרש השעות מ־UTC משתנה בין מועדים בתחזית. מתזמן Cron אמיתי עשוי להתנהג אחרת במעבר השעון.',
     repeatWarning: 'לפחות דקה אחת בשעון המקומי חוזרת בשני מועדים מוחלטים שונים.',
+    gapUniform: 'הפרש הזמן שנצפה בין המועדים החזויים:',
+    gapVariable: 'טווח הפרשי הזמן שנצפו בין המועדים החזויים:',
+    minutes: 'דקות',
+    gapsUnavailable: 'דרושים לפחות שני מועדים חזויים להצגת הפרשי זמן.',
     guideTitle: 'מדריך השדות',
     fields: 'דקה · שעה · יום בחודש · חודש · יום בשבוע',
     every15: 'כל 15 ערכים בשדה',
@@ -87,6 +95,7 @@ const runsList = document.querySelector('#next-runs');
 const errorBox = document.querySelector('#error');
 const timezone = document.querySelector('#timezone');
 const note = document.querySelector('#next-note');
+const gapSummary = document.querySelector('#gap-summary');
 const runCount = document.querySelector('#run-count');
 const previewFrom = document.querySelector('#preview-from');
 const resetStart = document.querySelector('#reset-start');
@@ -133,6 +142,7 @@ function invalidatePreview() {
   errorBox.hidden = true;
   errorBox.textContent = '';
   note.textContent = dictionary[language()].previewOutdated;
+  gapSummary.textContent = '';
 }
 
 function render() {
@@ -143,6 +153,7 @@ function render() {
   note.textContent = previewFrom.value ? messages.previewNoteSelected : messages.previewNote;
   lastPreview = null;
   calendarButton.disabled = csvButton.disabled = jsonButton.disabled = true;
+  gapSummary.textContent = '';
   try {
     const schedule = parseCron(cronInput.value);
     const dates = nextRuns(schedule, Number(runCount.value), selectedStart());
@@ -150,6 +161,13 @@ function render() {
       lastPreview = { expression: schedule.expression, runs: dates };
       calendarButton.disabled = csvButton.disabled = jsonButton.disabled = false;
       const risks = previewClockRisks(dates);
+      const gaps = previewGaps(dates);
+      const gapLabel = gaps.uniform ? messages.gapUniform : messages.gapVariable;
+      gapSummary.textContent = gaps.minMinutes === null ? messages.gapsUnavailable :
+        gapLabel + ' ' + (gaps.uniform ? String(gaps.minMinutes) :
+          gaps.minMinutes + '–' + gaps.maxMinutes) + ' ' + messages.minutes +
+        '. ' + (lang === 'he' ? 'על סמך המועדים המוצגים בלבד, לא הבטחת הפעלה.' :
+          'Based on displayed predictions only, not guaranteed executions.');
       const warnings = [];
       if (risks.offsetChanges) warnings.push(messages.offsetWarning);
       if (risks.repeatedLocalMinutes) warnings.push(messages.repeatWarning);
