@@ -1,0 +1,258 @@
+/**
+ * Five-field Unix cron parser, explanation, and local-time next-run calculator.
+ * No network requests, locale dependencies, or third-party packages.
+ *
+ * Supported: *, lists, numbers, ranges, steps, JAN-DEC, SUN-SAT and
+ * @hourly/@daily/@weekly/@monthly/@yearly convenience macros.
+ * Day-of-month and day-of-week use traditional cron OR semantics when both
+ * are restricted. Timezone is the Date object's local timezone.
+ */
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MONTH_NAMES = Object.fromEntries(MONTHS.map((name, index) => [name, index + 1]));
+const WEEKDAY_NAMES = Object.fromEntries(WEEKDAYS.map((name, index) => [name, index]));
+const ALIASES = Object.freeze({
+  '@yearly': '0 0 1 1 *',
+  '@annually': '0 0 1 1 *',
+  '@monthly': '0 0 1 * *',
+  '@weekly': '0 0 * * 0',
+  '@daily': '0 0 * * *',
+  '@midnight': '0 0 * * *',
+  '@hourly': '0 * * * *'
+});
+
+const SPECS = [
+  { name: 'minute', min: 0, max: 59 },
+  { name: 'hour', min: 0, max: 23 },
+  { name: 'dayOfMonth', min: 1, max: 31 },
+  { name: 'month', min: 1, max: 12, names: MONTH_NAMES },
+  { name: 'dayOfWeek', min: 0, max: 7, names: WEEKDAY_NAMES }
+];
+
+function parseValue(raw, spec) {
+  const upper = raw.toUpperCase();
+  const number = spec.names?.[upper] ?? (/^\d+$/.test(upper) ? Number(upper) : NaN);
+  if (!Number.isInteger(number) || number < spec.min || number > spec.max) {
+    throw new SyntaxError('Invalid ' + spec.name + ' value: "' + raw + '".');
+  }
+  return number;
+}
+
+function parseField(raw, spec) {
+  if (!raw || raw.includes('?') || raw.includes('#')) {
+    throw new SyntaxError('Unsupported ' + spec.name + ' field: "' + raw + '". Use standard five-field cron syntax.');
+  }
+  const values = new Set();
+  for (const part of raw.split(',')) {
+    const match = /^([^/]+)(?:\/(\d+))?$/.exec(part);
+    if (!match) throw new SyntaxError('Invalid ' + spec.name + ' segment: "' + part + '".');
+    const base = match[1];
+    const step = match[2] === undefined ? 1 : Number(match[2]);
+    if (!Number.isSafeInteger(step) || step < 1 || step > spec.max - spec.min + 1) {
+      throw new SyntaxError('Invalid step in ' + spec.name + ': "' + part + '".');
+    }
+
+    let start;
+    let end;
+    if (base === '*') {
+      start = spec.min;
+      end = spec.max;
+    } else if (base.includes('-')) {
+      const parts = base.split('-');
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        throw new SyntaxError('Invalid range in ' + spec.name + ': "' + part + '".');
+      }
+      start = parseValue(parts[0], spec);
+      end = parseValue(parts[1], spec);
+    } else {
+      start = parseValue(base, spec);
+      end = match[2] === undefined ? start : spec.max;
+    }
+    if (start > end) throw new SyntaxError('Backward range in ' + spec.name + ': "' + part + '".');
+    for (let n = start; n <= end; n += step) {
+      values.add(spec.name === 'dayOfWeek' && n === 7 ? 0 : n);
+    }
+  }
+  const totalPossible = spec.max - spec.min + (spec.name === 'dayOfWeek' ? 0 : 1);
+  // "All values selected" is NOT the same as a leading-star cron field.
+  // Traditional Vixie/Cronie DOM/DOW rules distinguish wildcard * syntax
+  // (including */steps) from explicit full-coverage ranges such as 1-31.
+  // Keep unrestricted for readable field descriptions, and retain the
+  // independent syntax property for matching semantics.
+  return {
+    raw, values,
+    unrestricted: values.size === totalPossible,
+    startsWithWildcard: raw.startsWith('*'),
+  };
+}
+
+/**
+ * Parse a traditional five-field cron expression.
+ * @param {string} input An expression such as "*/15 9-17 * * MON-FRI".
+ * @returns {{expression: string, original: string, minute: object, hour: object, dayOfMonth: object, month: object, dayOfWeek: object}}
+ */
+export function parseCron(input) {
+  if (typeof input !== 'string') throw new TypeError('Expression must be a string.');
+  const original = input.trim();
+  if (!original) throw new SyntaxError('Enter a cron expression.');
+  const expression = ALIASES[original.toLowerCase()] ?? original;
+  const parts = expression.toUpperCase().split(/\s+/);
+  if (parts.length !== 5) {
+    throw new SyntaxError('Expected exactly five fields: minute hour day-of-month month day-of-week.');
+  }
+  const fields = SPECS.map((spec, index) => parseField(parts[index], spec));
+  return {
+    original,
+    expression: parts.join(' '),
+    minute: fields[0],
+    hour: fields[1],
+    dayOfMonth: fields[2],
+    month: fields[3],
+    dayOfWeek: fields[4]
+  };
+}
+
+function matchesDay(schedule, date) {
+  const dayOfMonth = schedule.dayOfMonth.values.has(date.getDate());
+  const dayOfWeek = schedule.dayOfWeek.values.has(date.getDay());
+  // Cron's OR rule applies only when BOTH day fields begin with a
+  // non-wildcard token. An explicit 1-31 still counts as restricted
+  // even though it selects every day. Conversely, */2 starts with *
+  // and combines by AND; ignoring this would add unexpected run days.
+  return !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard
+    ? dayOfMonth || dayOfWeek
+    : dayOfMonth && dayOfWeek;
+}
+
+/**
+ * Check one exact local minute against the same field and DOM/DOW rules as
+ * nextRuns(). This compares wall-clock fields, not cron daemon execution.
+ * Seconds and milliseconds must be zero: cron has minute precision.
+ *
+ * The individual DOM/DOW booleans are diagnostic only. If both fields are
+ * restricted, an OR match succeeds when either day field matches.
+ * `failedFields` therefore reports the *combined* day condition.
+ */
+export function matchCronAt(schedule, at) {
+  if (!(at instanceof Date) || !Number.isFinite(at.getTime())) {
+    throw new TypeError('at must be a valid Date.');
+  }
+  const names = ['minute', 'hour', 'dayOfMonth', 'month', 'dayOfWeek'];
+  if (!schedule || names.some(name => !(schedule[name]?.values instanceof Set)) ||
+      typeof schedule.dayOfMonth.startsWithWildcard !== 'boolean' ||
+      typeof schedule.dayOfWeek.startsWithWildcard !== 'boolean') {
+    throw new TypeError('Expected a parsed five-field cron schedule.');
+  }
+  const fields = {
+    minute: schedule.minute.values.has(at.getMinutes()),
+    hour: schedule.hour.values.has(at.getHours()),
+    dayOfMonth: schedule.dayOfMonth.values.has(at.getDate()),
+    month: schedule.month.values.has(at.getMonth() + 1),
+    dayOfWeek: schedule.dayOfWeek.values.has(at.getDay()),
+  };
+  const dayRule = !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard ? 'or' : 'and';
+  const dayMatches = matchesDay(schedule, at);
+  const minuteBoundary = at.getSeconds() === 0 && at.getMilliseconds() === 0;
+  const failedFields = [];
+  if (!minuteBoundary) failedFields.push('minuteBoundary');
+  if (!fields.minute) failedFields.push('minute');
+  if (!fields.hour) failedFields.push('hour');
+  if (!fields.month) failedFields.push('month');
+  if (!dayMatches) failedFields.push('day');
+  return {
+    matches: failedFields.length === 0, minuteBoundary, fields,
+    dayRule, dayMatches, failedFields,
+  };
+}
+
+/**
+ * Find upcoming local-clock matches, strictly after the given time.
+ * Handles skipped local hours via JavaScript Date and does not assert
+ * portability across crontab implementations with different DST policies.
+ * @param {ReturnType<typeof parseCron>} schedule
+ * @param {number} [count=5]
+ * @param {Date} [from=new Date()]
+ * @returns {Date[]}
+ */
+export function nextRuns(schedule, count = 5, from = new Date()) {
+  if (!(from instanceof Date) || !Number.isFinite(from.getTime())) {
+    throw new TypeError('from must be a valid Date.');
+  }
+  if (!Number.isInteger(count) || count < 1 || count > 20) {
+    throw new RangeError('count must be between 1 and 20.');
+  }
+  const result = [];
+  // Advance in absolute (UTC) minutes, never by mutating local wall time.
+  // During a fall-back DST fold, a repeated local minute can resolve to
+  // its earlier occurrence when seconds are reset via setSeconds(0, 0).
+  // This must not produce a cron preview from before the requested instant.
+  const nextMinute = Math.floor(from.getTime() / 60_000) + 1;
+  let cursor = new Date(nextMinute * 60_000);
+  const lastYear = from.getFullYear() + 8;
+  let iterations = 0;
+
+  while (result.length < count && cursor.getFullYear() <= lastYear) {
+    if (++iterations > 3000000) break;
+    if (!schedule.month.values.has(cursor.getMonth() + 1)) {
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      continue;
+    }
+    if (!matchesDay(schedule, cursor)) {
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+      continue;
+    }
+    if (!schedule.hour.values.has(cursor.getHours())) {
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), cursor.getHours() + 1);
+      continue;
+    }
+    if (!schedule.minute.values.has(cursor.getMinutes())) {
+      cursor = new Date(cursor.getTime() + 60000);
+      continue;
+    }
+    result.push(new Date(cursor));
+    cursor = new Date(cursor.getTime() + 60000);
+  }
+  return result;
+}
+
+function formatSelected(field, names = null) {
+  return [...field.values].sort((a, b) => a - b).map(n => names ? names[n] : String(n)).join(', ');
+}
+
+/**
+ * Give a faithful human-readable description; preserves cron OR semantics.
+ * @param {ReturnType<typeof parseCron>} schedule
+ * @param {'en'|'he'} [locale='en']
+ * @returns {string}
+ */
+export function describeCron(schedule, locale = 'en') {
+  if (locale !== 'en' && locale !== 'he') throw new RangeError('Locale must be en or he.');
+  const dayRule = !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard;
+  const minute = schedule.minute.unrestricted ? null : formatSelected(schedule.minute);
+  const hour = schedule.hour.unrestricted ? null : formatSelected(schedule.hour);
+  const month = schedule.month.unrestricted ? null : formatSelected(schedule.month, Object.fromEntries(MONTHS.map((n, i) => [i + 1, n])));
+  const dom = schedule.dayOfMonth.unrestricted ? null : formatSelected(schedule.dayOfMonth);
+  const dow = schedule.dayOfWeek.unrestricted ? null : formatSelected(schedule.dayOfWeek, WEEKDAYS);
+
+  if (locale === 'he') {
+    return [
+      minute ? 'בדקות ' + minute : 'בכל דקה',
+      hour ? 'בשעות ' + hour : 'בכל שעה',
+      month ? 'בחודשים ' + month : 'בכל חודש',
+      dom ? 'בימי החודש ' + dom : 'ללא הגבלת יום בחודש',
+      dow ? 'בימי השבוע ' + dow : 'ללא הגבלת יום בשבוע'
+    ].join(' · ') + (dayRule ? '. כאשר יום בחודש ויום בשבוע מוגדרים, מספיק שאחד מהתנאים יתאים (OR).' : '.');
+  }
+
+  return [
+    minute ? 'At minute(s) ' + minute : 'Every minute',
+    hour ? 'during hour(s) ' + hour : 'every hour',
+    month ? 'in month(s) ' + month : 'in every month',
+    dom ? 'on day(s) of month ' + dom : 'on any day of the month',
+    dow ? 'on weekday(s) ' + dow : 'on any weekday'
+  ].join(' · ') + (dayRule ? '. When both day fields are restricted, either match is enough (OR).' : '.');
+}
