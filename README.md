@@ -12,7 +12,7 @@ A responsive, dependency-free browser tool that explains an expression and previ
 - \`@hourly\`, \`@daily\`, \`@weekly\`, \`@monthly\`, \`@yearly\`, and equivalent aliases.
 - Hebrew/English explanations with a one-click language switch.
 - Next **5, 10 or 20** matching local times, with timezone information.
-- Choose an optional **local start date/time** to preview future schedules, or reset to the current time; changing this field clears stale preview results and disables exports until the next calculation.
+- Choose an optional **local start date/time** to preview future schedules and **check whether that exact minute matches** the parsed rule, or reset to the current time. The check shows mismatched minute, hour, month or combined DOM/DOW conditions (including OR/AND semantics); it is informational and is never embedded in CSV/JSON/ICS exports. Changing the field clears stale previews and disables exports until recalculation.
 - Download the displayed occurrences as a standard **ICS calendar preview** with UTC event timestamps, a one-minute duration and explicit *not scheduled* labels. Importing ICS does not create cron jobs.
 - Export the same up to 20 predicted occurrences as **CSV**, with local date/time, UTC timestamp, per-occurrence UTC offset and timezone name. The file also flags offset changes since the preceding occurrence, repeated local-clock minutes, and `elapsed_minutes_since_previous`: the actual elapsed minutes between the current predicted UTC instant and its preceding occurrence. The first row leaves this field blank (no predecessor). The CSV contains no command or executable schedule.
 - Export a separate **JSON preview snapshot**, with normalized cron expression, timezone, UTC instants, browser-local wall-clock minutes, per-run UTC offset in minutes, **elapsed minutes since the previous prediction**, observed minimum/maximum intervals and DST warning flags. It contains no shell command and is not a runnable cron schedule.
@@ -42,12 +42,14 @@ Try:
 ## Parser API
 
 \`\`\`js
-import { parseCron, describeCron, nextRuns } from './src/cron.js';
+import { parseCron, describeCron, nextRuns, matchCronAt } from './src/cron.js';
 
 const schedule = parseCron('0 9 * * MON-FRI');
 console.log(describeCron(schedule, 'en'));
 console.log(describeCron(schedule, 'he'));
 console.log(nextRuns(schedule, 5, new Date()));
+// Exact local-minute membership, distinct from 'strictly after' nextRuns:
+console.log(matchCronAt(schedule, new Date(2026, 10, 23, 9, 0)));
 \`\`\`
 
 ### Scheduling semantics and limits
@@ -58,7 +60,8 @@ console.log(nextRuns(schedule, 5, new Date()));
 - When the preview contains different UTC offsets, the UI warns about the change. If two predicted instants have the same local minute but different UTC instants, it warns about the repeated wall-clock label. The checker does not determine *when* a transition occurred or how your actual cron daemon handles DST.
 - Future times are calculated against the **browser's local timezone** using JavaScript \`Date\`. The preview is not a guarantee that your specific cron scheduler will run (especially around daylight-saving clock changes).
 - The preview advances from the selected instant to the **next absolute UTC minute**, not by resetting seconds of an ambiguous local wall time. This prevents an autumn daylight-saving repeated hour from inadvertently moving the search backward and listing matches before the requested instant. Cron fields still match the browser's **local** time and this does not guarantee cron daemon execution.
-- The optional start date/time is interpreted in the browser's local timezone. Invalid calendar dates and nonexistent wall-clock minutes during forward daylight-saving changes are rejected. Ambiguous repeated minutes resolve to the earlier occurrence according to JavaScript Date behavior. A chosen start affects the preview only and is not transmitted anywhere.
+- The optional start date/time is interpreted in the browser's local timezone. Invalid calendar dates and nonexistent wall-clock minutes during forward daylight-saving changes are rejected. Ambiguous repeated minutes resolve to the earlier occurrence according to JavaScript Date behavior. A chosen start affects the preview and the exact-minute check only; it is not transmitted anywhere.
+- `matchCronAt(schedule, at)` evaluates the specified **exact local minute**, returning `matches`, individual `fields`, `dayRule`, `dayMatches`, `minuteBoundary` and `failedFields`. Cron has minute precision: seconds and milliseconds must equal zero. Only the combined day rule is a blocking condition; with restricted DOM and DOW fields, either may match. This describes wall-clock eligibility, not whether a real daemon executes. The selected minute is not included among `nextRuns()` results because they are strictly after the starting instant.
 - Search looks up to eight years ahead; expressions with no matching time in that horizon display a clear message.
 - No external requests or server-side processing are performed by the application.
 - The JSON/CSV/ICS exports are strictly snapshots of the displayed predicted matches, not a recurring rule. All export controls are disabled after input edits until recomputation; the JSON version rejects invalid or nonchronological instants and carries an explicit informational-only marker.
@@ -70,7 +73,7 @@ console.log(nextRuns(schedule, 5, new Date()));
 \`\`\`text
 index.html       Localized interface and field reference
 styles.css       Responsive layout and dark mode
-src/cron.js      Parser, local-time scheduler, English/Hebrew explanation
+src/cron.js      Parser, local-time scheduler, exact-minute match check, English/Hebrew explanation
 src/ics.js       RFC 5545 snapshot export of up to 20 predicted runs
 src/csv.js       UTF-8 CSV snapshot including local/UTC timestamps, offsets and elapsed minutes
 src/json.js      Machine-readable informational snapshot with DST diagnostic flags

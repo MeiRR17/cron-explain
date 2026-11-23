@@ -127,6 +127,48 @@ function matchesDay(schedule, date) {
 }
 
 /**
+ * Check one exact local minute against the same field and DOM/DOW rules as
+ * nextRuns(). This compares wall-clock fields, not cron daemon execution.
+ * Seconds and milliseconds must be zero: cron has minute precision.
+ *
+ * The individual DOM/DOW booleans are diagnostic only. If both fields are
+ * restricted, an OR match succeeds when either day field matches.
+ * `failedFields` therefore reports the *combined* day condition.
+ */
+export function matchCronAt(schedule, at) {
+  if (!(at instanceof Date) || !Number.isFinite(at.getTime())) {
+    throw new TypeError('at must be a valid Date.');
+  }
+  const names = ['minute', 'hour', 'dayOfMonth', 'month', 'dayOfWeek'];
+  if (!schedule || names.some(name => !(schedule[name]?.values instanceof Set)) ||
+      typeof schedule.dayOfMonth.startsWithWildcard !== 'boolean' ||
+      typeof schedule.dayOfWeek.startsWithWildcard !== 'boolean') {
+    throw new TypeError('Expected a parsed five-field cron schedule.');
+  }
+  const fields = {
+    minute: schedule.minute.values.has(at.getMinutes()),
+    hour: schedule.hour.values.has(at.getHours()),
+    dayOfMonth: schedule.dayOfMonth.values.has(at.getDate()),
+    month: schedule.month.values.has(at.getMonth() + 1),
+    dayOfWeek: schedule.dayOfWeek.values.has(at.getDay()),
+  };
+  const dayRule = !schedule.dayOfMonth.startsWithWildcard &&
+    !schedule.dayOfWeek.startsWithWildcard ? 'or' : 'and';
+  const dayMatches = matchesDay(schedule, at);
+  const minuteBoundary = at.getSeconds() === 0 && at.getMilliseconds() === 0;
+  const failedFields = [];
+  if (!minuteBoundary) failedFields.push('minuteBoundary');
+  if (!fields.minute) failedFields.push('minute');
+  if (!fields.hour) failedFields.push('hour');
+  if (!fields.month) failedFields.push('month');
+  if (!dayMatches) failedFields.push('day');
+  return {
+    matches: failedFields.length === 0, minuteBoundary, fields,
+    dayRule, dayMatches, failedFields,
+  };
+}
+
+/**
  * Find upcoming local-clock matches, strictly after the given time.
  * Handles skipped local hours via JavaScript Date and does not assert
  * portability across crontab implementations with different DST policies.

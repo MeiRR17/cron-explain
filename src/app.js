@@ -1,4 +1,4 @@
-import { parseCron, describeCron, nextRuns } from './cron.js';
+import { parseCron, describeCron, nextRuns, matchCronAt } from './cron.js';
 import { runsToIcs } from './ics.js';
 import { runsToCsv } from './csv.js';
 import { runsToJson } from './json.js';
@@ -22,7 +22,18 @@ const dictionary = {
     exportCalendar: '↓ Export .ics',
     exportCsv: '↓ Export .csv',
     exportJson: '↓ Export .json',
-    startLabel: 'Preview after (optional)',
+    startLabel: 'Preview after / check local minute (optional)',
+    checkTitle: 'Does the selected minute match?',
+    checkPrompt: 'Choose a local date and time above to check one exact minute.',
+    checkMatches: 'Yes — the selected local minute matches all required fields. This does not guarantee execution.',
+    checkNoMatch: 'No — the selected local minute does not match.',
+    checkReasons: 'Fields preventing a match:',
+    checkOutdated: 'Inputs changed. Select Explain & preview to check the selected minute.',
+    checkLabels: {
+      minuteBoundary: 'seconds or milliseconds are not zero',
+      minute: 'minute', hour: 'hour', month: 'month', day: 'combined day-of-month/weekday rule'
+    },
+    checkDayRule: { or: 'OR', and: 'AND' },
     startNow: 'Use current time',
     startTip: 'Leave blank to preview after now. Skipped daylight-saving wall times are rejected.',
     invalidStart: 'Enter a valid local date and time. Skipped daylight-saving times cannot be selected.',
@@ -64,7 +75,18 @@ const dictionary = {
     exportCalendar: '↓ ייצוא ליומן',
     exportCsv: '↓ ייצוא CSV',
     exportJson: '↓ ייצוא JSON',
-    startLabel: 'הצגת מועדים אחרי (לא חובה)',
+    startLabel: 'תחזית אחרי זמן נבחר / בדיקת דקה (לא חובה)',
+    checkTitle: 'האם הדקה שנבחרה מתאימה?',
+    checkPrompt: 'בחרו תאריך ושעה מקומיים למעלה כדי לבדוק דקה מסוימת.',
+    checkMatches: 'כן — הדקה שנבחרה עומדת בתנאים. אין בכך הבטחת הפעלה.',
+    checkNoMatch: 'לא — הדקה שנבחרה אינה עומדת בתנאים.',
+    checkReasons: 'שדות שמונעים התאמה:',
+    checkOutdated: 'הקלט השתנה. יש ללחוץ על הסבר והצגת מועדים כדי לבדוק מחדש.',
+    checkLabels: {
+      minuteBoundary: 'שניות או אלפיות שנייה שאינן אפס',
+      minute: 'דקה', hour: 'שעה', month: 'חודש', day: 'תנאי משולב של יום בחודש / יום בשבוע'
+    },
+    checkDayRule: { or: 'או (OR)', and: 'וגם (AND)' },
     startNow: 'השתמש בזמן הנוכחי',
     startTip: 'ללא בחירה התחזית מתחילה מעכשיו. שעות שאינן קיימות במעבר לשעון קיץ יידחו.',
     invalidStart: 'יש לבחור תאריך ושעה מקומיים תקינים. שעה שאינה קיימת במעבר שעון אינה נתמכת.',
@@ -103,6 +125,7 @@ const gapSummary = document.querySelector('#gap-summary');
 const weekdaySummary = document.querySelector('#weekday-summary');
 const runCount = document.querySelector('#run-count');
 const previewFrom = document.querySelector('#preview-from');
+const matchCheck = document.querySelector('#match-check');
 const resetStart = document.querySelector('#reset-start');
 const calendarButton = document.querySelector('#export-calendar');
 const csvButton = document.querySelector('#export-csv');
@@ -149,6 +172,8 @@ function invalidatePreview() {
   note.textContent = dictionary[language()].previewOutdated;
   gapSummary.textContent = '';
   weekdaySummary.textContent = '';
+  matchCheck.textContent = previewFrom.value
+    ? dictionary[language()].checkOutdated : dictionary[language()].checkPrompt;
 }
 
 function render() {
@@ -161,9 +186,21 @@ function render() {
   calendarButton.disabled = csvButton.disabled = jsonButton.disabled = true;
   gapSummary.textContent = '';
   weekdaySummary.textContent = '';
+  matchCheck.textContent = messages.checkPrompt;
   try {
     const schedule = parseCron(cronInput.value);
-    const dates = nextRuns(schedule, Number(runCount.value), selectedStart());
+    const start = selectedStart();
+    if (previewFrom.value) {
+      const check = matchCronAt(schedule, start);
+      const reasons = check.failedFields.map(field => messages.checkLabels[field]);
+      if (check.failedFields.includes('day')) {
+        const index = check.failedFields.indexOf('day');
+        reasons[index] += ' (' + messages.checkDayRule[check.dayRule] + ')';
+      }
+      matchCheck.textContent = check.matches ? messages.checkMatches :
+        messages.checkNoMatch + ' ' + messages.checkReasons + ' ' + reasons.join(' · ') + '.';
+    }
+    const dates = nextRuns(schedule, Number(runCount.value), start);
     if (dates.length) {
       lastPreview = { expression: schedule.expression, runs: dates };
       calendarButton.disabled = csvButton.disabled = jsonButton.disabled = false;
@@ -218,6 +255,7 @@ function render() {
   } catch (error) {
     explanation.textContent = '';
     normalized.textContent = '';
+    matchCheck.textContent = messages.checkPrompt;
     runsList.replaceChildren();
     errorBox.textContent = error instanceof Error ? error.message : 'Invalid cron expression.';
     errorBox.hidden = false;

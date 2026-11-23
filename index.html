@@ -34,7 +34,7 @@
         </div>
         <p class="small" id="syntax-tip" data-i18n="syntaxTip">Supports numbers, ranges, lists, steps, month/day names, and standard @daily-style macros.</p>
         <div class="start-row">
-          <label for="preview-from" data-i18n="startLabel">Preview after (optional)</label>
+          <label for="preview-from" data-i18n="startLabel">Preview after / check local minute (optional)</label>
           <input id="preview-from" type="datetime-local" step="60" aria-describedby="start-tip">
           <button id="reset-start" type="button" class="secondary-button" data-i18n="startNow">Use current time</button>
         </div>
@@ -68,6 +68,10 @@
         <button id="export-csv" type="button" class="secondary-button" disabled data-i18n="exportCsv">↓ Export .csv</button>
         <button id="export-json" type="button" class="secondary-button" disabled data-i18n="exportJson">↓ Export .json</button>
       </div>
+      <section class="match-check" aria-labelledby="check-heading">
+        <h3 id="check-heading" data-i18n="checkTitle">Does the selected minute match?</h3>
+        <p id="match-check" role="status" aria-live="polite">Choose a local date and time above to check one exact minute.</p>
+      </section>
       <ol id="next-runs" class="next-runs" aria-live="polite"></ol>
       <p id="next-note" class="small"></p>
       <p id="gap-summary" class="small" role="status" aria-live="polite"></p>
